@@ -1,0 +1,194 @@
+---
+title: "A-prioi comparisons with contrasts"
+author: "Laurel Brehm"
+output:
+  slidy_presentation: default
+---
+<!-- setup a two column layout to use in many slides, and update font sizes to make display prettier: -->
+<style>
+  .col2 {
+    columns: 2 150px;         /* number of columns and width in pixels*/
+    -webkit-columns: 2 150px; /* chrome, safari */
+    -moz-columns: 2 150px;    /* firefox */
+}
+body, td, code.r, pre {
+   font-size: 18px;
+}
+</style>
+
+  
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## load previously installed packages into library 
+library(lme4) #for mixed effect models
+library(tidyverse)  #plotting, tabulating, etc.
+library(languageR)  #the data set's in here
+library(markdown)
+
+## install plyr-- but DO NOT LOAD
+## install.packages('plyr')
+```
+
+# How to use contrasts efficiently to get the comparisons you want
+<div class="col2">
+I simulated some data that would work for this example using lexdec, making up some data for how native language might affect lexical decision time. Use this data (which has a 4-level variable) to show how different contrast coding schemes provide different a-priori comparisons in your data.
+
+We will use a centered Frequency variable because it makes the other effects a little easier to see-- centering a continuous variable is a nice trick to make the model converge a little faster too (but at the expense of naive readability as to what zero reflects).
+
+Load in data, center frequency, and make a boxplot. 
+
+```{r setup}
+lexdecSm <- read.table('simulatedLexDec.txt',header=T)
+
+lexdecSm$FreqC <- lexdecSm$Frequency - mean(lexdecSm$Frequency)
+
+### make a boxplot of means
+## (note that Dutch is the leftmost-- alphabetical assignment)
+ggplot(lexdecSm,aes(x=NativeLangSim,y=RT,fill=NativeLangSim))+
+  geom_boxplot()
+```
+</div>
+
+# How to use contrasts efficiently to get the comparisons you want
+I made up this example to have the default contrast coding scheme be useless-- it would compare all levels to the first-alphabetically, which is Dutch.  Let's try some different contrasts instead.
+
+```{r defaults}
+contrasts(lexdecSm$NativeLangSim)
+```
+
+# Sum contrasts 
+<div class="col2">
+
+Let's use a sum coding contrast scheme: Compare Dutch to English, German to Spanish, and the average of English and Dutch to the average of German and Spanish.  This will allow us to test whether the most-similar language is different from English, and whether the two most-different languages are different from each other. Set these, and run a new analysis.
+
+To run this, we will make it so that zero lives in the middle of each of our comparisons, by making them positive and negative 1/2.
+
+```{r sum, include=T}
+## make new contrast matrix with named values
+## my own personal convention = label has positive value first
+EngvDutch <- c(-1/2,1/2,0,0)  ## Dutch = -1/2, Eng = 1/2
+GervSpa <- c(0,0,1/2,-1/2) ## Ger = 1/2, Spa = -1/2
+EngDuvGerSpa <- c(1/2,1/2,-1/2,-1/2) ## Dutch = 1/2, Eng= 1/2, Ger=-1/2 Spa=-1/2
+
+SumZero <- cbind(EngvDutch,GervSpa,EngDuvGerSpa)
+rownames(SumZero)=c("Dutch","English","German","Spanish")
+
+## set these contrasts
+contrasts(lexdecSm$NativeLangSim) <- SumZero
+
+### run analysis
+lmSumZero <- lmer(RT~NativeLangSim*FreqC + (1+FreqC|Subject)+(1 |Word),data=lexdecSm)
+summary(lmSumZero)
+```
+</div>
+
+# Sum contrasts 
+<div class="col2">
+
+We observed that the overall intercept estimate was 6.89.  The main effect of EngvDutch is -.20-- the intercept for this condition (black line) is in 6.69.  The main effect of GervSpa is .19-- the intercept for this condition (black line) is 7.08.  You can see this in the plot. 
+
+The main effect of Frequency is -0.05.  That means: on average, across all language groups, the effect of frequency is decreasing by .06 for each unit of y (RT in log milliseconds)
+
+We also observed a large EngDu versus GerSpa interaction. Note that the black lines in both panels have different intercepts. That's all that means! The effect estimate is negative here-- this means that the level assigned to be a positive number in the contrasts (EngDu) is smaller than the one assigned to be a positve number (GerSpa). In fact, the intercept estimate is .54 smaller (the beta).
+
+And, there is an EngDu by Frequency interaction. This means that the red line has a steeper slope than the green line in the left panel... steeper by beta (0.03) much. 
+
+\
+
+\
+
+```{r sum2, include=T}
+### plot to unpack interaction!
+## use revalue function from plyr package to make new var that sets up contrast we want in display
+lexdecSm$NLcontr3 <- plyr::revalue(lexdecSm$NativeLangSim,c("English"="EngDu","Dutch"="EngDu","German"="GerSpa","Spanish"="GerSpa"))
+
+ggplot(lexdecSm,aes(x=FreqC,y=RT,color=NativeLangSim))+
+  geom_point(alpha=.1) + geom_smooth(color='black',method='lm') +
+  geom_smooth(method='lm') + facet_grid(~NLcontr3)
+
+```
+</div>
+
+# Simple effect contrasts
+
+A contrast coding scheme that tests effects with respect to the average level is called simple effects coding. This is also straighforward to implement. It's like the dummy coding matrix (which was ones and zeroes), but instead of zeroes, we use -1/k (here, -1/4). Instead of ones, we use (k-1)/k.
+
+```{r simple, include=T}
+#### Set simple effects coding contrasts ####
+### reference level = still English
+## make new contrast matrix with named values
+Dutch <- c(3/4,-1/4,-1/4,-1/4) 
+Ger <- c(-1/4,-1/4,3/4,-1/4)
+Spa <- c(-1/4,-1/4,-1/4,3/4)
+
+Seff <- cbind(Dutch,Ger,Spa)
+rownames(Seff)=c("Dutch","English","German","Spanish")
+
+## set these contrasts
+contrasts(lexdecSm$NativeLangSim) <- Seff
+
+### run analysis
+lmSimple <- lmer(RT~NativeLangSim*FreqC + (1+FreqC|Subject)+(1|Word),data=lexdecSm)
+```
+
+# Simple effects contrasts 
+<div class="col2">
+The model is overall somewhat similar to a dummy-coded one, but all effects relate to the average.  The intercept is the average response time across all conditions, and the effect of Dutch, German, and Spanish reflects the difference between these and the average value.
+
+Note that the effect of Frequency now matches the model with sum-coding.  This is because all effects are evaluated at the average response time-- including Frequency.Here, this is the average effect of Frequency-- not the effect of Frequency for English speakers (as it was in the most-recent model). 
+
+This is key: contrasts affect the other variables too, since they affect what the intercept means.  Make sure to set the right contrasts for comparing ALL variables at the right level.
+
+```{r simple2, include=T}
+summary(lmSimple)
+```
+</div>
+
+# Helmert contrasts
+<div class="col2">
+A variant on sum coding is Helmert coding. This is useful for ordered factors. Here, the first comparison tests one level versus everything 'larger' than it (ordinally), by comparing (k-1) to -1. The second comparsion replaces the (k-1) with a zero, and then compares the next largest level to everything 'larger', by setting those to -1. And so forth, until you're only comparing two things!
+
+```{r helmert, include=T}
+## make new contrast matrix with named values
+## remember, the levels are out of order!
+H1 <- c(-1,3,-1,-1) 
+H2 <- c(2,0,-1,-1)
+H3 <- c(0,0,1,-1)
+
+Helm <- cbind(H1,H2,H3)
+rownames(Helm)=c("Dutch","English","German","Spanish")
+
+#set contrasts
+contrasts(lexdecSm$NativeLangSim) <- Helm
+
+## if you have things ordered in the right way, this is equivalent to
+#contrasts(lexdecSm$NativeLangSim) <- contr.helmert 
+
+### run analysis
+lmHelm <- lmer(RT~NativeLangSim*FreqC + (1+FreqC|Subject)+(1 |Word),data=lexdecSm)
+```
+</div>
+
+# Helmert contrasts
+<div class="col2">
+The intercept is the same as in the sum coding model and the simple effects model; same for the main effect of frequency. The main effects at each contrast are different. Contrast 1 reflects the difference between the English RT and everything else; contrast 2 reflects Dutch vs German and Spanish; and contrast 3 reflects German vs Spanish. 
+
+But! They don't reflect the numeric difference. They reflect the average difference in the levels compared. This says that the average difference between English and all others is roughly the same as Dutch and (Spanish, German), but that the Spanish-German difference is smaller.
+
+What's particularly nice about this model is the way we can interpret the interactions. Note that the estimate for contrast 1 by frequency is the largest-- that reflects how English has a flatter slope for Frequency than all the other groups.  (We saw that in the panel plot above!)
+
+```{r}
+summary(lmHelm)
+```
+</div>
+
+# More fun with contrasts
+
+To learn more:
+
+Setting your own contrasts in R:
+https://stats.idre.ucla.edu/r/library/r-library-contrast-coding-systems-for-categorical-variables/
+
+Using built-ins effectively:
+https://arxiv.org/abs/1807.10451

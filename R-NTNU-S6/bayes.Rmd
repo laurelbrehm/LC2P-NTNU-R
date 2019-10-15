@@ -1,0 +1,160 @@
+---
+title: "Bayesian Stats"
+author: "Laurel Brehm"
+output:
+  slidy_presentation: default
+---
+<!-- update font sizes to make display prettier: -->
+<style>
+body, td, code.r, pre {
+   font-size: 18px;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Background
+
+The type of statistics we've been discussing up until this point falls under the _frequentist_ framework. Specifically, we've been doing *null hypothesis significance testing*: comparing two distributions in order to reject a null hypothesis by assessing whether the observed data are sufficiently unlikely given an alternate hypothesis using t and p values.
+
+There is an alternate formalism: Bayesian statistics. These are very easy to implement in R, and provide a really useful way of thinking about data when you want to quantify *how much* evidence you have for different hypotheses, rather than simply accepting/rejecting a null.
+
+Bayesian stats revolve around conditional probability in the form of Bayes' Rule:
+
+$$ P(A|B) = \frac{P(B|A)P(A)}{P(B)} $$
+
+This says: the probability of A given B (the _posterior_) is defined by the probability of B given A (the _likelihood_), times the probability of A (the _prior_), divided by the probability of B (the _evidence_).
+
+The posterior is what we want to know: we can estimate it by assessing some data and combining it with a prior (an expectation about what we thought would happen)!  This flips the whole stats question to thinking about what is likely under different worlds.
+
+For more details on the background, here's an accessible paper: https://link.springer.com/article/10.3758/s13423-016-1221-4
+
+# Fitting a model in brms
+
+For now, turn to R. One easy interface for running Bayesian models in R is the package brms.
+
+```{r echo=TRUE, include=FALSE}
+#install.packages(brms)  #install and comment out if necessary.
+library(brms)
+library(languageR)
+library(tidyverse)
+```
+
+To run a Bayesian model in brms, you'd use the same syntax as in a (g)lmer model, but call the function brm() instead.  Easy!
+
+```{r eval=FALSE}
+brm1 <- brm(RT ~ Frequency*NativeLanguage  + (1|Subject) + (1|Word), data=lexdec)
+```
+
+# Fitting a model in brms
+
+By default, the package will set priors for you. These may or may not be useful-- they're often a flat prior across all real numbers (all real numbers are equally likely values)
+
+You can set priors by adding some code to the model. A good prior to fall back on is a normal prior centered around zero-- this says 'I think a value near zero is likely'.  These are 'weakly informative' priors.
+
+There are lots of options for priors-- this is great, because you can use your beliefs about your model to improve model fit:
+
+For example:
+
+* If you very strongly believe that your estimate should be zero, you'd set a 'horsehoe' prior: set_prior("horseshoe(1)")
+
+* If you think that your estimate is likely to be *not* centered around zero, you can center a normal prior around that point: set_prior("normal(2,2)"
+
+* More info: https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations
+
+
+```{r eval=FALSE}
+brm1 <- brm(RT ~ Frequency*NativeLanguage  + (1|Subject) + (1|Word), data=lexdec,
+            prior = c(set_prior("normal(0,2)", class = "b")) )
+```
+
+# Fitting a model in brms
+
+Then, some more options:  We want to make sure the model runs enough to have sampled a distribution well.  We can do this by having multiple 'chains' (multiple paralell runs of the model), and make sure that they run for a certain amount of time.
+
+In this code, I'm setting 4 chains -- a pretty standard number because it's the number of paralell processors in a lot of computers. The first half of the model is just warming up, because we want to make sure that it's started to sample the space efficiently.  Then, we'll run it out for the rest of the iterations.
+
+This will often take a bit of time!  For very complex models, this can take days. Fortunately, brms will give you updates as it runs. Let it run and come back and look at it later...
+
+```{r}
+brm1 <- brm(RT ~ Frequency*NativeLanguage  + (1|Subject) + (1|Word), data=lexdec,
+            prior = c(set_prior("normal(0,2)", class = "b")),
+            chains= 4, warmup=2000, iter=4000)
+```
+# Fitting a model in brms
+
+Once the model's finished, you can look at it. You'll note that there are 'group-level' effects (like 'random effects' in an lmer), and 'population-level effects' (like 'fixed effects' in an lmer).
+
+First, find the Rhat columns-- check that all Rhat values are 1.00.  
+
+If not: re-run the model with more samples and/or more chains. You can do this easily with the 'update' function, as commented out below:
+
+
+```{r}
+summary(brm1)
+
+#update(brm1,warmup=3000, iter=6000)
+```
+# Assessing a model in brms
+
+Once your Rhat values are all 1.00, look to see how the posteriors are distributed. In particular, you'll look to see if the samples in the sampling period look like a 'fuzzy caterpillar' -- symmetric about the estimate with fewer observations towards the edges.
+
+Here, I'm asking for everything to be plotted all automatically for me.
+
+```{r}
+plot(brm1, ask=F)
+
+## to get only the betas: 
+#plot(brm1, pars = "^b_") 
+
+```
+
+# Assessing a model in brms
+
+Now, we can come back and look at the summary again. Like an lmer, we can see estimates for our various parameters. Here, there are 95% Credible Intervals-- which represent the region that the posteriors were mostly found in. This is more informative than the CI around an estimate defined in NHST, because p-values don't actually mean what you think they mean intuitively.
+
+Again, one inference you can draw is that for 95% CrI's that don't cross zero, we can be pretty certain that the posterior is reliably different from zero-- aka, it has an effect.  
+
+```{r}
+summary(brm1)
+```
+
+# Assessing a model in brms
+
+We can ask for a plot of the marginal effects for some specific term. This can help with interpreting interactions. 
+
+```{r}
+plot(marginal_effects(brm1, "Frequency:NativeLanguage"), ask = FALSE)
+```
+
+# Assessing a model in brms
+
+We can also draw the inference that an estimate is quite close to zero!  Or quantify the amount of the posterior beyond some region. 
+
+Here, I'm asking what proportion of the posteriors are to the right of -0.02, and what proportion of the posteriors are to the left of -0.04.
+
+```{r}
+samps <- posterior_samples(brm1,"Frequency:NativeLanguageOther$")
+samps <- samps$`b_Frequency:NativeLanguageOther`
+
+## % of posterior samples to the right of some number:
+1 - ecdf(samps)(-0.02)
+
+## % of posterior samples to the left of some number:
+ecdf(samps)(-0.04)
+
+```
+
+There's a lot more that you can do!  For example, you can set a non-gaussian distribution for your evidence, have more complex priors, test Bayes factors, and a lot more.
+
+# More resources: 
+
+A vignette by the brms author: https://cran.r-project.org/web/packages/brms/vignettes/brms_multilevel.pdf
+
+A tutorial using brms to analyse speech data (with nice examples of plots):
+https://www.sciencedirect.com/science/article/pii/S0095447017302310
+
+A full book on why Bayesian stats are useful (with puppies)-- note that the algorithms are different (though brms actually uses Stan under-the-hood):
+https://sites.google.com/site/doingbayesiandataanalysis/what-s-new-in-2nd-ed

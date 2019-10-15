@@ -1,0 +1,133 @@
+---
+title: 'LC2P: Correlations and t-tests'
+author: "Laurel Brehm"
+output:
+  slidy_presentation: default
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=6, fig.height=4) 
+
+library(tidyverse)
+library(lme4)
+library(languageR)
+```
+
+
+Let's think statistically about some of the relationships in the lexdec set.  We'll begin with some basic tests-- correlations and t-tests.
+
+Work through this code with me by opening corrT.Rmd in R studio, and running each chunk at a time.
+
+One thing we've been looking at so far is: how does RT vary by word frequency?
+
+Re-do a plot: the overall relationship between RT and word frequency.
+
+```{r}
+ggplot(lexdec,aes(x=Frequency,y=RT))+
+  geom_point(alpha=.5)+
+   geom_smooth(method='lm',color='black')+
+  theme_bw()
+```
+
+
+# Correlation = covariance
+
+One diagnostic we might want to know is the *correlation* between these variables. Correlation is the degree to which two variables co-vary. It ranges between -1 (perfectly opposite) and 1 (perfectly the same).
+
+Based upon the downward direction in the plot, we can tell that frequency is negatively correlated with reaction time.  Based upon the spread ('fluffy cloud') in the data, we can tell that this correlation is not very strong.
+
+We can test this with a bit of code, using the default Pearson correlation.
+
+```{r}
+cor1 <- cor.test(lexdec$RT,lexdec$Frequency)
+cor1
+```
+
+Correlation is symmetric-- the same no matter which variable you put in first...
+
+```{r}
+cor2 <- cor.test(lexdec$Frequency,lexdec$RT)
+cor2
+```
+
+# Correlation matrices
+
+The place I use correlations the most is in thinking about the structure of my data-- are there predictors that covary?  To see the pair-wise associations between linear variables, make a correlation matrix! 
+
+I took out some columns from the lexdec data set relating to the properties of the words. It's often the case that a lot of word-level properties covary-- for example, frequent words come from large morphological families, frequent words are short, etc, etc.  
+
+(This is also a commomn situation for individual difference or demographic variables: important to assess what goes together for the purpose of model builidng).
+
+By looking at the correlation between these variables, I can see that yes, there are some pretty strong relationships between the variables here.
+
+```{r}
+cor(lexdec[,c(10:13,15:17)])
+```
+
+# Plotting correlation matrices
+
+You can make some neat plots of correlation matricies. These are a fantastic way of compactly displaying the info in a paper or talk. 
+
+Here's some ggplot code to do so-- it's a bit long but fairly straighforward (and a nice example of how much customization you can do in ggplot).
+
+```{r}
+## Here is some code to create a correlation matrix plot in ggplot2.
+## based on http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization
+## requires installing reshape2
+## install.packages('reshape2')
+
+## Make a pair-wise correlation matrix of the variables in columns 10-13 and 15-17 in lexdec (many of the numeric lexically related variables)
+corM <- round(cor(lexdec[,c(10:13,15:17)]),2)
+## put in NA values to plot only the lower half (we set the 'lowr.tri' to NA here b/c the plot wil flip)
+corM[lower.tri(corM)]<- NA
+## turn the matrix into a long data frame 
+melted_cormat <- reshape2::melt(corM, na.rm = TRUE)
+
+## make the plot, using a lot of customised theme values to set elements blank and move around the legend.
+ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), name="Pearson Correlation") +
+  coord_fixed() + 
+  geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.ticks = element_blank(),
+    legend.justification = c(1, 0),
+    legend.position = c(0.5, 0.7),
+    legend.direction = "horizontal")+
+     guides(fill = guide_colorbar(barwidth = 6, barheight = .8,
+                               title.position = "top", title.hjust = 0.5))
+
+```
+
+# T-test =  difference between two groups.
+
+For categorical variables, we need a different test.  We might want to know if there is a difference between two groups of variables-- for example, in the plot below, it looks like there is a .15 difference in the median RT for the two native language groups. 
+
+```{r}
+ggplot(lexdec,aes(x=NativeLanguage,y=RT))+
+  geom_violin(draw_quantiles=c(.5))+
+  theme_bw()
+```
+
+# T-test =  difference between two groups.
+
+We can subset out the data from the two groups and run a t-test on them. This shows us that yes, the mean of the two groups is reliably different from zero (meaning they are different from each other), and that we are 95% confident that on repeated experiments with the same population, the groups would range in difference between -0.18 and -0.13.
+
+A very easy test to run... but it's not necessarily the most informative.  More about better options tomorrow (and how t-tests are actually just a way of describing a regression).
+
+```{r}
+NLE <- lexdec %>% filter(NativeLanguage=="English") %>% select(RT)
+NLO <- lexdec %>% filter(NativeLanguage=="Other") %>% select(RT)
+
+ttest1 <- t.test(NLE,NLO)
+ttest1
+```
+

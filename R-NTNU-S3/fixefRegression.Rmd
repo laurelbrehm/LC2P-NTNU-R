@@ -1,0 +1,492 @@
+---
+title: 'LC2P: Fixed effects only linear and logistic regression'
+author: "Laurel Brehm"
+output:
+  slidy_presentation: default
+---
+<!-- setup a two column layout to use in many slides, and update font sizes to make display prettier: -->
+<style>
+  .col2 {
+    columns: 2 150px;         /* number of columns and width in pixels*/
+    -webkit-columns: 2 150px; /* chrome, safari */
+    -moz-columns: 2 150px;    /* firefox */
+}
+body, td, code.r, pre {
+   font-size: 18px;
+}
+</style>
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=9, fig.height=4) 
+
+library(tidyverse)
+library(lme4)
+library(languageR)
+library(effects)
+```
+
+# Linear regression
+<div class="col2">
+
+Let's think statistically about some of the relationships in the lexdec set.
+
+For example, consider again: how does RT vary by word frequency? We looked at that with a correlation and a t-test, but there's another important relationship: that of the best-fit line that describes the points.
+
+Lines are regression models. Regressions are the #1 tool to learn for describing data. We will talk about a variety of types of regression models today.
+
+Start again with a plot: the overall relationship between RT and word frequency.
+
+```{r}
+ggplot(lexdec,aes(x=Frequency,y=RT))+
+  geom_point(alpha=.5)+
+   geom_smooth(method='lm',color='black')+
+  theme_bw()
+```
+</div>
+
+# Linear regression with a continuous predictor
+<div class="col2">
+One model we could run on the data in this plot is a linear regression on RT, using the continuous predictor (also called 'fixed effect') of 'frequency'. Regression is the degree to which some dependent variable y is predicted by some independent variable (predictor, also called 'fixed effect') x.  
+
+We can get parameters for the slope and intercept-- and the ratio of their estimate to error (a t-value!)-- by running the following code... 
+
+Importantly, because we care about the intercept, this test is not symmetric-- the Y variable (= dependent variable) always goes to the left. (Note how this differs from the correlation case we ran yesterday-- we're drawing lines, rather than characterising covariance.)
+
+\
+
+
+
+```{r}
+lm1 <- lm(RT~Frequency, data=lexdec)
+summary(lm1)
+```
+</div>
+
+# Residuals
+
+The stuff that's not explained in the data (the 'fluffiness' of the point cloud) around the line, is described by the *residual term* in a regression model-- this represents how far away from the points the line is (in the X direction). 
+
+We can run some code to save the residual errors from a model and then make plots of those too.
+
+# Residuals
+<div class="col2">
+
+Three things to check in these plots:
+
+(1). Are the residuals co-varying with the Y value (going up or down, rather than straight across)? This would mean we haven't explaned some part of Y very well. (Looks like that's the case here... a lot else going on other than frequency) 
+
+(2).  Are the residuals normally distributed (following a bell curve centered at zero)? Approximately-- that's good. That's the main condition for whether the data *should* be fitted with a standard linear regression model. 
+
+(3). Do the residuals follow the same distribution as the original data?-- do they make a line if we plot the quantiles of each against each other? This is another diagnostic for whether the data *should* be fitted with a standard linear model.
+
+\
+
+\
+
+\
+
+
+```{r}
+Lm1Residuals <- resid(lm1)
+
+## the code below uses base R plots:
+par(mfrow=c(1,3)) ## for base R plots: putting all in a row
+
+plot(lexdec$RT,Lm1Residuals,main='Residual by fitted value',
+     ylab='Residuals',xlab='(Fitted) RT'); abline(0,0)
+
+plot(density(Lm1Residuals),main='Distribution of residuals')
+
+qqnorm(Lm1Residuals, main="Quantile-Quantile plot");
+    qqline(resid(lm1))
+
+```
+</div>
+
+# Linear regression with categorical predictors
+<div class="col2">
+
+It's simple to run a linear regression with categorical predictors too. This means you can test a lot of questions with a regression *instead of a t-test!* -- and in fact, it also means that a t-test is a special case of a regression model.
+
+To draw a line (= run a regression) with categorical predictors, you need to assign x values to things that are not numbers. This is called setting contrasts.
+
+Let's walk through what this means in terms of the 'NativeLanguage' predictor in lexdec.
+
+Here's a plot. I made it as points only with error bars because R won't draw a line between "English" and "Other".
+
+```{r}
+ggplot(lexdec,aes(x=NativeLanguage, y=RT))+
+    stat_summary(fun.y = mean, geom = "point") + 
+    stat_summary(fun.data = mean_se, geom = "errorbar",width=.1)+
+    theme_bw()
+```
+</div>
+
+# Linear regression with categorical predictors
+<div class="col2">
+
+
+To draw a line, *all we have to do is code these values as numbers*.  This is *exactly* what constrast coding is.
+
+Here is one way of turning "NativeLanguage" to a number-- I told R to I set the first-in-the-alphabet value ("English") to 0, and the second ("Other") to 1 with the code 'as.numeric(FACTOR)-1'. 
+
+Now we can plot this as a line (using some extra code for setting the scale prettily.)  I also marked the intercept value in the graph-- Y where X=0 -- note that it corresponds to the "English" outcome.
+
+\
+
+\
+
+\
+
+\
+
+```{r}
+im <- unlist(lexdec %>% filter(NativeLanguage=='English') 
+             %>% summarise(mean(RT)))
+
+ggplot(lexdec,aes(x=as.numeric(NativeLanguage)-1, y=RT))+
+    stat_summary(fun.y = mean, geom = "line") + 
+    stat_summary(fun.data = mean_se, geom = "errorbar",width=.1)+
+    theme_bw()+
+    scale_x_continuous("NativeLanguage",breaks=c(0,1),
+                       labels=c("0=English", "1=Other"))+
+    geom_point(aes(x=0,y=im),color='red')
+  
+```
+</div>
+
+# Linear regression with categorical predictors: dummy coding
+<div class="col2">
+
+This way of contrast coding the factor (categorical predictor) 'NativeLanguage' is what R does by default. You can check what numbers R has assigned to a factor by running this line of code: contrasts(FACTOR)
+
+We can then run a linear model just like we would for a continuous predictor!
+
+In the model below, the intercept represents RT when X=0...aka, the effect of being in the 'English' group.  (Same as the red dot in the plot above.)
+
+The next variable (the fixed effect) is then the effect of being in the 'Other' group: an RT that is .15 log milliseconds more. This is a reliable difference-- as noted by the t-value (ratio of estimate to error) and p-value associated with it.
+
+(And as a short aside-- if you go back and look at the code we ran yesterday, you'll note that the t-test on these data gave the same answer... because it's secretly the same test)
+
+```{r}
+contrasts(lexdec$NativeLanguage)
+
+lm2 <- lm(RT~NativeLanguage, data=lexdec)
+summary(lm2)
+
+```
+</div>
+
+# Linear regression with categorical predictors: effects coding
+<div class="col2">
+
+We can also *set* our contrasts. Here is another option: If we put the intercept in the *middle* of our levels (shown in the plot below), this will make the intercept reflect the *mean of the conditions*.  This means that the fixed effect in the model will properly be the *main effect* of NativeLanguage. 
+
+Here, using the contrasts of (-1,1) means that the main effect represents the difference between each level (one unit step in each direction) and the grand mean (zero).
+
+[Think: What would contrasts of (-.5, .5) therefore represent?]
+
+```{r echo=FALSE}
+cm <- mean( unlist(lexdec %>% group_by(NativeLanguage) %>% summarise(mean(RT)))[3:4])  ## take the mean by condition, and then average those together.
+
+ggplot(lexdec,aes(x=(as.numeric(NativeLanguage)-1.5)*2, y=RT))+
+    stat_summary(fun.y = mean, geom = "line") + 
+    stat_summary(fun.data = mean_se, geom = "errorbar",width=.1)+
+    theme_bw()+
+    scale_x_continuous("NativeLanguage",breaks=c(-1,1),labels=c("-1=English", "1=Other"))+
+    geom_point(aes(x=0,y=cm),color='red')
+```
+
+```{r}
+contrasts(lexdec$NativeLanguage) = c(-1, 1)
+
+lm3 <- lm(RT~NativeLanguage, data=lexdec)
+summary(lm3)
+
+```
+</div>
+
+# Logistic regression: to a generalized line
+
+We can generalize our line even more-- in fact, we aren't restricted to linear outcome variables either. The equations that implement linear regression have been generalized to other dependant measures to make *GLM*s -- generalized linear models.
+
+Today we are running logistic regression models, which are for binomial (two option) outcomes. In this case, the y variable is the log odds of outcome p. The x variable is the intercept and any predictors you have that change the slope of the line. There are no residuals, because of the way the link function to y is operationalized (outcome p, or outcome 1-p).
+
+
+# Walk-through of an example: Titanic
+<div class="col2">
+
+It is very simple to implement a logistic regression model in R. It is somewhat less simple to understand what the model means. Let's unpack both together.
+
+We'll start with a simple logistic regression example using Titanic survivorship data. People either survived (a success, coded as 1), or they did not. This is a very clear example of a binomial outcome.
+
+Start by reading in the data, re-coding one variable appropriately, and creating a table that shows how many people survived.
+
+```{r echo=T}
+TitanicAll <- read.csv('TitanicAll.csv',header=T, sep="\t")
+
+TitanicAll$Pclass <- as.factor(TitanicAll$Pclass)
+
+TitanicAll %>% group_by(Survived) %>% summarise(n())
+```
+
+\
+
+</div>
+
+# Titanic model: Tabulating by age
+<div class="col2">
+
+One thing I'd heard about disaster scenarios is that people try to save children. I do hope this is the case.  Let's test it here in these data.
+ 
+ Tabulate survivorship by age, binning to units of 10. The mid-point of the bin is the integer value-- (so, 0 reflects kids under 5, 10 reflects age 5-15, and so forth).
+ 
+ This shows that more people in the very youngest ages survived than died-- that's good to hear.
+ 
+ \
+ 
+ \
+ 
+ \
+ 
+```{r echo=T}
+
+TitanicAll %>% mutate(BinAge = round(Age/10)*10) %>%
+  group_by(BinAge, Survived) %>% summarise(n())
+
+```
+
+</div>
+
+# Titanic model: analysis
+
+Next, we implement whether age predicts surviving in the model below. 
+
+Note that it is a *g*lm and that there is this additional thing at the end-- family='binomial'
+
+This is because there are lots of types of glm models-- binomial is probably the most common one.
+
+```{r echo=T}
+glm1 <- glm(Survived ~ Age, data=TitanicAll, family='binomial')
+
+```
+
+
+# Titanic model: output
+<div class="col2">
+
+In this model output table, focus on the coefficients.
+
+These are in log-odd space. 
+
+Think: What do the negative log odds mean, if log odds= zero means 50% probability ?
+
+\
+
+\
+
+\
+
+\
+
+\
+
+\
+
+```{r echo=T}
+summary(glm1)
+```
+
+
+</div>
+
+# Titanic model: output
+<div class="col2">
+
+For the intercept, this reflects that the likely outcome was not surviving. 
+
+For the main effect, this reflects that not surviving became more likely for older people.
+
+\
+
+\
+
+\
+
+\
+
+\
+
+\
+
+
+```{r echo=T}
+summary(glm1)
+```
+
+</div>
+
+# Titanic model: visualizing
+
+Think: what does this plot mean? 
+
+
+```{r echo=T}
+## use 'effects' package to extract the fitted effect from a model:
+mci <- as.data.frame(effect("Age",glm1))
+
+ggplot(data=TitanicAll,aes(x=Age,y=Survived))+
+  geom_point(alpha=.1)+
+  geom_line(data=mci,aes(y=fit))+
+  theme_bw()
+
+```
+
+
+# Contrasts and multiple predictors
+
+We might want to ask a more complex question with the Titanic data, so we'll turn back to thinking about contrasts.  Setting contrasts becomes especially important when you have a model containing multiple predictors.
+
+For more complex models, it matters what is 0 for *all factors*
+
+That is to say:
+
+A dummy coded model reflects the effect of factor A at the baseline level of factor B.
+
+This is the case for all types of models-- linear models, and logistic models.  But in the Titanic data set it happens to be really easy to see!
+
+Look at contrasts and interactions more with Titanic.  We'll subset the data to look at what happens by age and gender for first and second class passengers.
+
+```{r}
+## subset the data
+TitanicSome <- TitanicAll %>% filter(Pclass != '3')
+TitanicSome <- droplevels(TitanicSome) 
+
+TitanicSome$Pclass <- as.factor(TitanicSome$Pclass)
+```
+
+
+
+# Dummy contrasts and multiple predictors (in a glm)
+<div class="col2">
+
+Here is a model using *dummy* coding for both gender and passenger class. How to interpret it?
+
+\
+
+\
+
+```{r}
+## set dummy contrasts for both factors
+contrasts(TitanicSome$Gender) <- c(0, 1)
+contrasts(TitanicSome$Pclass) <- c(0, 1)
+
+CsT1 <- contrasts(TitanicSome$Gender)
+CpT1 <- contrasts(TitanicSome$Pclass)
+
+T1 <- glm(Survived ~ Gender*Pclass, family='binomial',data=TitanicSome)
+
+summary(T1)
+```
+
+
+</div>
+
+# Effects contrasts and multiple predictors (in a glm)
+<div class="col2">
+
+Here is a model using *effects* coding for both gender and passenger class. How to interpret it?
+
+\
+
+\
+
+```{r}
+contrasts(TitanicSome$Gender) <- c(-.5,.5)
+contrasts(TitanicSome$Pclass) <- c(-.5,.5)
+
+CsT2 <- contrasts(TitanicSome$Gender)
+CpT2 <- contrasts(TitanicSome$Pclass)
+
+ 
+T2 <- glm(Survived ~ Gender*Pclass, family='binomial',data=TitanicSome)
+
+summary(T2)
+```
+</div>
+
+
+# Summary: contrasts and multiple predictors
+<div class="col2">
+
+Note the differences between the models...
+
+- First, the good news: The interaction is identical in both models.  The highest-order term (= interaction including all the factors in the model) is always identical no matter what the contrasts are.  That's because, again, it's the same model.
+
+- But, now the bad news:  The effects terms are different.
+
+- In model 1, it looks like there is an effect of gender but no effect of passenger class.
+
+- In model 2, it looks like there is an effect of gender and passenger class.
+
+```{r}
+## dummy coded model
+round(coef(summary(T1)),4)
+
+## effects coded model
+round(coef(summary(T2)),4)
+```
+
+\
+
+</div>
+
+
+# Summary: contrasts and multiple predictors
+<div class="col2">
+
+What is actually going on is that there is no *simple effect* of passenger class in gender=Female, but there is a *main effect* of passenger class (First class people survived more often).
+
+```{r}
+round(coef(summary(T1)),4)
+
+round(coef(summary(T2)),4)
+```
+
+\
+
+This becomes easier to see in a plot:
+
+```{r}
+ggplot(TitanicSome,aes(x=as.numeric(Gender), y=Survived, color=Pclass, lty=Pclass))+
+    stat_summary(fun.y = mean, geom = "line") + 
+    stat_summary(fun.data = mean_se, geom = "errorbar",width=.1)+
+    theme_bw()+
+    scale_x_continuous("Gender",breaks=c(1,2),labels=c("Female","Male"))
+  
+```
+
+</div>
+
+# Recap
+
+Regressions are a great way of capturing the a relationship between values that can be described as a line:
+
+- for linear outcomes with linear predictors
+
+- for binomial outcomes with linear predictors (by looking at log odds)
+
+- and for linear/binomial outcomes with categorical predictors (by setting contrasts, aka X values)
+
+In the output of a regression model you get:
+
+- An intercept-- what is Y when X=0 ?  This estimate might reliably differ from zero, according to the t-value associated with it-- and in your analysis, you might or might not care whether it does.
+
+- Slopes for each fixed effect predictor of interest-- how much does the value of Y change when X changes by one unit?  You probaably care about the size of this effect (the size of the t-value)
+
+# Extra time:
+
+(1) Questions?
+
+(2) Play with some data-- implement a fixed-effects only lm or glm for lexdec or Titanic.

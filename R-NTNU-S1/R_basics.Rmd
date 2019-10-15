@@ -1,0 +1,331 @@
+---
+title: "LC2P: R Basics"
+author: "Laurel Brehm"
+output: html_document
+---
+
+## What is R?
+R is an open-source programming language. People have written code to perform lots of statistical tests, and you can access these using something called *packages* that are downloaded from the internet. There are also lots of parts of R that are pre-loaded in to your computer. This is called 'base R'.
+
+One nice way to use R is in a R markdown notebook. This is a way of combining stats with a text document. In essence, we are combining two programs at once. Text gets written in the document in segments like this. 
+
+# Putting hash mark(s) specifies text to be used as headers. 
+*surrounding with stars makes text italic*
+
+To access R, we insert a 'code chunk'.  Here's one that comes in for free when you create an R markdown doc, and one that's useful to run to make the code by default show your work.
+
+Note that it starts and ends with three ` (tic marks).  The first line starts with curly brackets. The first thing in it says that it is for 'r'.  The next is the chunk's name (useful for writing clean code). Then the final argument says that we should show the code in the output.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+All code chunks for R start the same way.  I often like using R this way because it lets me take notes, and to compile a bunch of analyses and graphs and text into one really convenient notebook. 
+
+You can, instead, just write a script and save it as a .R file.  I'll demo how to do this now in a new window...
+
+
+## Working in base R
+Here are some things that R can do using functions. We'll put them in a code chunk. This code chunk is just like writing a little R script-- but it's embedded between text, for taking notes.
+
+You can run one line at a time by putting your mouse in it and pressing command/windows enter (in R studio, or command/windows R in base R).
+
+```{r R_demo-Func, echo=TRUE}
+## hash mark in here means 'comment'. (if there is a hash mark in front of a line, don't delete it.)
+## R knows how to do math using some basic 'functions' -- little operations that you call using the syntax: function(input).
+3+7
+exp(10)
+log(10)
+
+## R can save computations as variables, using the assign arrow.
+a <- 3+10
+## the output is by default supressed, but you can ask R to tell it to you:
+a
+
+# And can use variables in later computations
+b <- exp(a)
+b
+
+## R can make lists using the operator "c" (for concatenate)
+numbers <- c(1,2,3,4)
+numbers
+
+animals <- c("cat", "dog", "elephant", "squid")
+
+## numbers have some shortcuts:
+numbers <- 1:4
+numbers
+
+#and numbers can be operated on in lists... but characters can't.
+numbers/4
+# animals/4
+
+#and lists have properties too, like their length:
+length(numbers)
+length(animals)
+
+## one last property of interest for now: we can generate random sequences:
+## draw 10 numbers randomly from a normal distribution with mean 1, sd 1
+rnorm(10,1,1)
+
+## make 10 1-trial draws from binomial distribution trials with success p(.5) ('coin flips' or more technically, bernouli trials):
+rbinom(10,1,.5)
+
+## and... we can ask for help
+# ?rnorm
+# ?rbinom
+```
+
+You can use functions on data! Some data sets are already stored in R...
+
+```{r R_demo-Data, echo=TRUE}
+#We pull up data from base R:
+data(iris)
+## and ask for documentation about it with ? (pops up in bottom right panel).
+## I put a comment here because it doesn't make sense to pass to R Markdown for knitting
+# ?iris
+
+## We can ask to see the top of that data.
+head(iris)
+
+## and ask about data's dimension
+dim(iris)
+
+## these data are a special type of matrix called a 'data frame'
+## data frames have the property of 'summary' of all variables at once:
+summary(iris)
+
+```
+
+## Libraries
+
+We can also draw upon functions in packages we can install.
+
+We will be working with these important packages containing libraries.
+
+* tidyverse contains code for plotting and summarising (dplyr and ggplot)
+
+* markdown contains functions to make R markdown notebooks.
+
+* lme4 contains the code for mixed models. We will use this later today so you should install it.
+
+* languageR has a lot of built-in data sets with language data in them. We'll use this today too.
+
+* effects helps visualize models that you've run. We'll use this later.
+
+To install these, we run some code ONCE and then comment it out. Let's do this in a new code chunk:
+
+
+```{r installation, echo=TRUE}
+## hash marks in code chunks mean something different-- here they are comments: notes for you that the computer shouldn't evaluate.
+## note that we set echo= true here.
+
+## in this code chunk, we will *run* some code, by pressing the green triangle in upper right of this box, then *comment* it out with a # so that R markdown doesn't try to evaluate it.  this is important-- because you only want to install packages once.  once they're installed, they exist on your computer (you bought the package containing the book for your home library)
+#install.packages('tidyverse')
+#install.packages('markdown')
+#install.packages('lme4')
+#install.packages('languageR')
+#install.packages('effects')
+
+## then, add a # before each of lines 123 - 127
+## and run the following code, which you should keep un-commented in the code chunk. this is important-- because once it exists on your computer, you still have to tell R to use it (you put the book on your desk from your home library). you'll always run code like this every time you want to use a package.
+library(tidyverse)
+library(markdown)
+library(lme4)
+library(languageR)
+library(effects)
+```
+
+
+To learn more about any package, you can google it! There will be good documentation out there.
+
+Let's start by looking at lexdec in languageR.  Type '?lexdec' in your R console now.
+
+
+## dplyr 
+We will use the functions in the dplyr package, contained in tidyverse, to tabulate and summarise data in lexdec.
+
+The basic syntax to dplyr is that you pass arguments from left to right using a %>% (pipe) operator.  This makes the code very readable.
+
+There are some basic 'verbs' to use with dplyr:
+
+* select -- subset the columns
+
+* filter -- subset the rows
+
+* arrange -- order rows
+
+* mutate -- create new columns
+
+* summarize plus group_by -- create summary variables across groups
+
+We can use text commands inside select/ filter, mean/sd/count fucntions inside summarize, and both inside mutate.
+
+To learn more... here's a great cheat sheet:  https://rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf
+
+(an R markdown aside-- see the buttons in the top right? you can use them to respectively: set chunk preferences, run everything up to this point, and run this chunk)
+
+
+```{r select, eval=F}
+## Selecting operations
+## named columns
+lexdec %>% select(RT,Subject)
+
+## columns that share a beginning
+lexdec %>% select(starts_with('BNC'))
+
+## or an end
+lexdec %>% select(ends_with('Ratio'))
+
+```
+
+
+```{r filter, eval=F}
+## Filtering operations
+## a subset of rows based on a logical condition
+lexdec %>% filter(Subject=='A1') ## note the == for logical and the quotes around text
+lexdec %>% filter(RT < 6 )
+
+## we can do both at the same time: fulfill both conditions with and "&"
+lexdec %>% filter(Subject =='A1' & RT < 6 )
+
+## we can use or "|"
+lexdec %>% filter(Subject =='A1' | Subject=='A2' )
+
+## note that logical and is different from linguistic and: this one's empty.
+lexdec %>% filter(Subject =='A1' & Subject=='A2' )
+```
+
+```{r mutate, results="hide"}
+## note the new chunk option: results="hide"
+# we need the output of this chunk for later functions, but we don't want to see it in R markdown.
+
+## Create new variables with mutate
+lexdec %>% mutate(FreqSProp = FreqSingular/(FreqSingular + FreqPlural))
+
+## for mutated variables, make sure to pass back to the data set with the left arrow if you want to use it outside this local computation
+lexdec <- lexdec %>% mutate(FreqSProp =  FreqSingular/(FreqSingular + FreqPlural))
+```
+
+```{r summarise, results="hide"}
+## We can summarise over groups by combining summarise and group_by
+lexdec %>% group_by(Word,FreqSProp) %>% 
+  summarise(mean(RT))
+
+## Summarise can also do n() or 'count' operations
+## here we will calculate the number of errors overall, and then sort by that in reverse (using the - before it)
+ErrTab <- lexdec %>% group_by(Word,RT) %>%
+  filter(Correct == 'incorrect') %>% summarise(ErrorCount=n()) %>%
+  arrange(-ErrorCount)
+```
+
+## Base R data set manipulation
+
+There is also a way of using base R commands to refer to parts of data frames.  Sometimes this is very convenient! This uses a special square bracket and dollar sign notation. In some cases, this can be an easier way of creating new variables.
+
+```{r baseR-datasets}
+## note the new code chunk option-- don't specify, and use document defaults
+
+## first row
+lexdec[1,]
+
+#first column
+lexdec[,1]
+
+## call named variable
+lexdec$NativeLanguage
+
+## ...and embed in summary command
+summary(lexdec$NativeLanguage)
+
+## this notation is great for applying functions to a whole column of a data frame.
+## use quantile function with desired quantiles embedded in c() list
+quantile(lexdec$RT, c(.2,.4,.6,.8,1))
+
+```
+
+
+## Inputting and outputting
+Commands run through R live inside R.  Data that you read in do not get changed outside of R.  
+
+So, we also need to learn to read in data, and read it out again. This is how you'll probably use R in your own research.
+
+Let's read in data about Trondheim weather, do some manipulations on it, and spit it out again. These are in the file called "trondheim_weather.txt"-- if you downloaded the whole course materials set from GitHub, it'll be in the same folder this script lives in. R markdown by default sets the working directory to be the folder the script lives in, meaning that what's read in and out will go to that folder.
+
+I pulled these data from Wikipedia and weather-and-climate.com.  Temperatures are averages per month, in degrees celcius.  Precipitation is average per month, in mm. Sun is average hours per month. This convention on Wikipedia annoys me because each month has different numbers of days. Let's fix it.
+
+```{r input+output, include=T}
+nW <- read.table('trondheim_weather.txt',header=T)
+
+nW
+
+## let's calculate average sun hours and precipitation per day using dplyr-- these data sort of don't make sense as they are!
+## use tidyverse notation to do so: for thinking about the data as a set of columns, I like to use dplyr.
+nW <- nW %>% mutate(mm_day_precip = round((tot_precip / days), 2)) %>%
+   mutate(hrs_day_sun = round((tot_sun / days),2))
+
+
+## I also want to create a running average of whether the month is more or less rainy than the previous month.
+## use if else statements and bracket notation to do so!-- this is tabulating in base R.
+## for thinking about the data as a matrix, I like to use base R.
+
+## first, create a default level of the variable
+nW$more_rainy <- 'yes'
+
+## now, think about the first row-- we need to refer to the last row's value...
+nW[1,9] <- ifelse(nW[1,7] < nW[12,7], 'no', 'yes')
+
+## do the same operation in a loop with the rest:
+i=1 ## always good to initialize your counters
+for (i in 2:12){
+nW[i,9] <- ifelse(nW[i,7] < nW[i - 1,7], 'no', 'yes')
+}
+
+## now that we've done all this, write it out.
+write.table(nW,'trondheim_weather_2.txt',row.names=F,col.names=T,sep="\t")
+```
+
+## DIY functions
+
+You can write your own functions in R.  These use similar notation to control loops, and are a convenient way of repeating the same operation multiple times on different data.
+
+```{r, func, include=T}
+## curly braces are used in so-called 'control statements' like for. they're also used in home-made functions.  You can write your own!
+rolling_av <- function(data,columnIndex,size){
+  ## figure out how many columns and rows are in the original data
+  drows <- dim(data)[1]
+  dcols <- dim(data)[2]
+  ## then add the end to the beginning in a new data frame, based upon how many you want to average over
+  data2 <- rbind(data[(drows-size+2):drows,],data)
+  ## now, make and name new variable to put the average in
+  ## first add it to the data frame
+  data <- cbind(data,rep(0,drows))
+  ## then rename it using a combo of paste and eval: 
+  colnames(data)[dcols+1] <- paste0('rav_',eval(colnames(data)[columnIndex]))
+  ## now run the rolling average. put the averages in the original data frame based upon the rows of the new data frame.
+  for (k in 1:drows){
+    data[k,dcols+1] <- mean(data2[k:(k+size-1),columnIndex])
+  }
+  ## the last line is the output of the function:
+  data
+}
+
+## to use: run the code lines containing the function to put it in your workspace
+## then use like any other function
+## the inputs I made are, as a reminder, the data, the column index in that data to average over, and the number of months to average over (where e.g. 2= this month & the 1 before)
+## the beauty of writing a function is that it is highly replicable for running the same procedure repeatedly!
+## also all the intermediate stuff goes away-- note that your workspace doesn't contain k, data, data2, drows, size, etc... only the output.
+nW2 <- rolling_av(nW,3,5)
+
+nW2
+
+## In-class exercise, if we have time: how would you use logical statements &/or loops &/or functions to find the best 3 months to schedule an internship elsewhere, based on your weather preferences? (too hot, too cold, or too rainy?)
+```
+
+## Knitting
+
+'knitting' creates an html document out of your R markdown. An html is a clean, platform-independant document (basically, a self-contained webpage). You can use markdown to combines text and code in it!
+
+Once you've created some code, knit by pressing the ball of yarn in the upper options bar. (If it doesn't work: did you comment out your 'install.packages' commands?)
+
+There will be a new file that's called R_basics.html.  You can open this in a web browser (though note-- it's not actually a website, just a file of type .html). You can also knit to other file types, such as .pdf (requires Latex) or .doc. Options are next to the ball of yarn.

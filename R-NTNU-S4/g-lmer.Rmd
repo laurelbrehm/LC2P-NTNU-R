@@ -1,0 +1,452 @@
+---
+title: "(G)Linear mixed-effect models"
+author: "Laurel Brehm"
+output:
+  slidy_presentation: default
+---
+<!-- setup a two column layout to use in many slides, and update font sizes to make display prettier: -->
+<style>
+  .col2 {
+    columns: 2 150px;         /* number of columns and width in pixels*/
+    -webkit-columns: 2 150px; /* chrome, safari */
+    -moz-columns: 2 150px;    /* firefox */
+}
+body, td, code.r, pre {
+   font-size: 18px;
+}
+</style>
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## load previously installed packages into library 
+library(lme4) #for mixed effect models
+library(tidyverse)  #plotting, tabulating, etc.
+library(languageR)  #the data set's in here
+library(effects)  #for extracting effects from models
+```
+
+# What's an MEM?
+
+MEM = a mixed effect model. That means it's a model that has fixed and random effects.
+
+Anything you can analyse with a repeated measures ANOVA, you can analyse with MEM. In addition, MEM allows crossed random effects, both categorical AND continuous predictors, and is good for unbalanced data sets.  It's a very versatile tool. 
+
+# First lmer model
+
+We'll start out with a simple model that has a continuous dependant measure (reaction time; RT) and a single continous predictor (raw frequency).  In the experimental design, data were collected from many people (subjects) who observed many items (words).  Each person saw each word and made a decision about it.  In addition, each word is associated with one frequency level.  
+
+In model terms: Predict the dependent measure RT from the fixed effect of raw word frequency, plus random intercepts for subjects and items.
+
+# First lmer model: fixed effects
+
+Fixed effects are things that are measured/manipulated on purpose: things you predicted could have an effect on the dependent measure. These are observations not drawn at random, so their effects are allowed to vary away from zero. Frequency is a fixed effect because we manipulated it in the experiment. So is Native Language.  Start by making a plot of these:
+
+```{r}
+ggplot(lexdec,aes( x=Frequency, y=RT,color=NativeLanguage,shape=NativeLanguage,lty=NativeLanguage)) + geom_point() + geom_smooth(method='lm') + theme_bw() + scale_color_viridis_d()
+
+```
+
+# First lmer model: random effects
+<div class="col2">
+Random effects are things that are drawn at random (hence the name). If you have a 'repeated measures' design, the repeated measures will almost always be your random intercepts. In the model, their average effect will always be zero, but they may capture variance. Each person might respond a little differently, and each word might be a little different, even if it has the same level of frequency.
+
+Random slopes are like a slope term in the fixed effect portion of the model (a predictor), but instead, we assess whether they should vary by the group that defines the random intercept.
+
+Make plots of these as well:
+
+\
+
+\
+
+\
+
+\
+
+\
+
+```{r, fig.height=3.2, fig.width=8}
+ggplot(lexdec,aes(x=Frequency, y=RT,color=Subject)) +
+  geom_point() + geom_smooth(method='lm') + theme_bw() + scale_color_viridis_d()
+
+ggplot(lexdec,aes(x=Frequency, y=RT,color=Word,shape=NativeLanguage)) + 
+  geom_point() + geom_smooth(aes(lty=NativeLanguage),color='black',method='lm') +
+  theme_bw() + scale_color_viridis_d()
+```
+</div>
+
+# Building a model
+ Now put these pieces together for a model. It's a similar syntax to lm, but we're adding an 'er' to the end, and a piece for the random terms:
+ 
+ *model output* <-  lmer ( *DV* ~ 1 + *Fixed Effects * + (1 + *Random Slope* | *Random Intercept*), data=*Data*)
+
+We will also include an optional argument today, REML = F.  This means "restricted maximum likeihood" is NOT the methods we'll use-- we will use maximum likelihood. This is useful for model comparisons, which is something we will do today to evaluate the effect of frequency.
+
+The 1 + before the fixed effects is actually also optional.  It means 'give me an intercept', but the model will by default, give you an intercept.  
+
+# Building a model
+
+Here is the maximal model involving frequency and native language that is justified by our data: include the interaction between them (as a fixed effect), plus a random intercept for Subject and Word, and a random slope for Frequency by Subject, and a random slope of Native Language by Word.
+
+Think: why is this random effect structure the maximal one justified?
+
+```{r}
+contrasts(lexdec$NativeLanguage) <- c(-.5, .5)
+
+mem1 <-  lmer ( RT ~ 1 + Frequency*NativeLanguage  + (1 + Frequency | Subject) +  (1 + NativeLanguage | Word), data=lexdec, REML=F)
+
+```
+
+# Convergence problems...
+
+This model fails to converge.  Looking at the random effects only (or Variance components and Correlations), we can see why: the random slope for NativeLanguage is highly correlated with the random intercept for Word.  Take it out.  
+
+(Often models will also not converge if there is an effect that accounts for almost no variance-- there will sometimes be a warning about Singular Fit in this case. It's also the case that as best practice, you should always take out higher-order terms that account for little variance, starting with any interactions in random slopes.)
+
+```{r}
+VarCorr(mem1)
+```
+
+# Refit
+
+This model fits better!
+
+```{r}
+mem2 <-  lmer ( RT ~ 1 + Frequency*NativeLanguage  + (1 + Frequency | Subject) +  (1  | Word), data=lexdec, REML=F)
+
+summary(mem2)
+```
+
+# Interpreting
+<div class="col2">
+To interpret what the model means, look at the fixed effects-- estimates, the error around them, and the t-value (ratio of estimate to error). Frequency, Native Language, and their interaction all have reliably large effects compared to the error of the estimate.  
+
+The overall intercept reflects the estimated (log) RT value when predictors are zero-- since we did effects coding for Native Language, this would reflect the RT we'd expect for a word with zero log Frequency averaged across both Native Language conditions.
+
+The effects here are main effects: the change in RT with a one-unit change in log Frequency or Native Language (the difference in average RT going from English to Other).
+
+The interaction reflects that the different levels of Native Language have different slopes by Frequency: the Native Language = Other group has a steeper slope, because the negative contrast is for Other, and the estimate is negative. (We also know this by looking at the plot)
+
+We also see info about the random effects. There is no estimate term for them: the estimate is defined as zero for random effects. But there is a variance term for each-- each of our random effects is a group of points within the data that is systematically variable from the cell that the data belong to. There are also correlations between slopes and intercepts fit to the same group of data (here: subject)
+
+```{r}
+mem2 <-  lmer ( RT ~ 1 + Frequency*NativeLanguage  + (1 + Frequency | Subject) +  (1  | Word), data=lexdec, REML=F)
+
+summary(mem2)
+```
+
+\
+
+\
+</div>
+
+# Is it a good model?
+<div class="col2">
+Recall the same plots we made for the fixed-effect only regression:  we can make them again here to diagnose model fit. Note that the syntax for the first model is different: we can take a shortcut to extract the data for lmer objects.
+
+These plots indicate that this model is *a lot better*.  Adding the random effects (and the extra fixed effects) has substantially improved model fit.
+
+\
+
+\
+
+```{r fig.width=4, fig.height=4}
+plot(mem2)
+
+plot(density(resid(mem2)),main='Distribution of residuals')
+
+qqnorm(resid(mem2)); qqline(resid(mem2))
+```
+</div>
+
+# A lack of p-values...
+
+There are no p-values associated with lmer models. This is because there is no closed-form solution to the model-- all the random effects and fixed effects are modeled at once, meaning there is no well-defined notion of a 'degree of freedom', which is the missing piece to define p-values. 
+
+That's ok, because you don't need p-values.
+
+Really.  
+
+All you need really is to know that the ratio of effect to error is reasonably large.  This means you can decide that t>2 is sufficient evidence for your hypothesis (2x as much estimate as error).  You can cite Baayen 2008 (the R book) as precedent.
+
+# Confidence intervals for parameters
+<div class="col2">
+Here's another nice option: get a confidence interval on your parameters.  If the 95% CI doesn't cross zero, the parameter is reliably significant.
+
+The 'sig' terms are the random effects: slopes, intercepts, correlations, and residuals.
+
+(There is an error here in that the sig03 term-- the correlation between random intercept for Subject and the random slope for Frequency by Subject-- is reaching a boundary of -1. In this case, it doesn't matter because I don't want to draw inferences around the random effects.)
+
+\
+
+\
+```{r}
+confint(mem2)
+```
+</div>
+
+# P-values by model comparison
+<div class="col2">
+But if you do decide you want them, here's a way to get them:
+But, but, but....I want p-values!  Ok, here's a way of thinking about it that's better defined for modeling: how much does including the factor improve my model?  We can test this using model comparison. This work flow does a model comparison that is equivalent to using the type-III sum of squares in an ANOVA: drop out one factor at a time and test what it does.
+
+This will *only* work for predictors that are coded as numerics-- here, a dummy coded version of Native Language.  So, re-run everything... using a numeric version of native language, coded with -.5, .5.
+
+Because of convergence troubles with some of these models, I've also had to simplify the random effect structure.
+
+```{r}
+lexdec$NL2 <- as.numeric(lexdec$NativeLanguage) - 1.5
+
+mem02 <- lmer ( RT ~ 1 + Frequency*NL2  + (1  | Subject) +  (1  | Word), data=lexdec, REML=F)
+
+mem20 <- lmer ( RT ~ 0 + Frequency*NL2  + (1 | Subject) +  (1  | Word), data=lexdec, REML=F)
+mem21 <- lmer ( RT ~ 1 + NL2+Frequency:NL2  + (1 | Subject) +  (1  | Word), data=lexdec, REML=F)
+mem22 <- lmer ( RT ~ 1 + Frequency+Frequency:NL2  + (1 | Subject) +  (1  | Word), data=lexdec, REML=F)
+mem23 <- lmer ( RT ~ 1 + Frequency+NL2  + (1 | Subject) +  (1  | Word), data=lexdec, REML=F)
+
+```
+</div>
+
+# P-values by model comparison
+<div class="col2">
+Next, we compare these models with a series of chi-squared tests... which you call using the command "anova".  Note the last column: this is the p-value associated with the model comparison that leaves the term out.  This comes from a chi-squared test on the likelihood ratio of the two models using a chi-squared function with one degree of freedom (one parameter is different). The p-value for this number is very small, meaning that adding frequency relably improves model fit more than would be expected due to chance.
+
+```{r compare models, include=T}
+anova(mem02,mem20)
+anova(mem02,mem21)
+anova(mem02,mem22)
+anova(mem02,mem23)
+```
+</div>
+
+# P-values by model comparison
+Note: there are other ways of getting p-values.  
+
+You can use a Satterthwaite approximation  to get degrees of freedom for your t distribution, and get p-values that way (https://cran.r-project.org/web/packages/lmerTest/lmerTest.pdf).
+
+Or you can do a type-II model comparison (remove all higher-order terms that effect participates in).
+
+(Or you can just...not do it, seriously, it's ok.)
+
+
+# GLMER models: repeated measures for binomial outcomes
+
+Mixed models also work for GLMs-- next, let's assess error rates (correct, incorrect) instead of RTs! Note that we don't have to re-set contrasts for NativeLanguage because we did that above.
+
+This is very straightforward, using a similar syntax as above, but with a 'g' and family='binomial' call (as with glm).
+
+I started out with a somewhat complex random effect structure-- the largest justified by the design of the study-- and simplified due to non-convergence.
+
+```{r}
+## this model doesn't converge -- remove NativeLanguage by Word slope because it (1) accounts for very little variance, and (2) is perfectly correlated with the Word intercept.
+##glmer1 <- glmer(Correct ~ Frequency*NativeLanguage + (1 + Frequency | Subject) + (1 + NativeLanguage | Word), data=lexdec, family='binomial')
+
+## this model converges but is still overfitted-- the Frequency by Subject slope is still highly correlated with Subject intercept, so remove.
+##glmer1 <- glmer(Correct ~ Frequency*NativeLanguage + (1 + Frequency | Subject) + (1 | Word), data=lexdec, family='binomial')
+
+glmer1 <- glmer(Correct ~ Frequency*NativeLanguage + (1 | Subject) + (1 | Word), data=lexdec, family='binomial')
+```
+
+
+# GLMER models: repeated measures for binomial outcomes
+<div class="col2">
+After removing some random slopes (common for glmer models), we have a fitted model. 
+
+We can see that because the intercept is negative, the 0 value (by default, again the first alphabetically= correct) is more likely.  
+
+Frequency has a significant effect on likelihood of incorrect responses-- higher frequency is associated with more correctness, as indicated by the negative value. 
+
+Because this is a glmer, we also use a (Wald) z-value to compare estimate to error, and then, we get a p-value associated with our fixed effect terms. This ype of p-value is 'anti-conservative' (too liberal) but an ok approximation that we get for free.
+
+\
+
+\
+
+\
+
+\
+
+```{r}
+summary(glmer1)
+```
+</div>
+
+# GLMER models: repeated measures for binomial outcomes
+<div class="col2">
+
+To assess model fit, we can again plot the distribution of residuals and the qqplot. They will tend to be less pretty than you'd see in a linear model, which relates to the shape of the log odds distribution we are comparing to (steep slope in the middle, shallow on the sides), and the different meaning that 'residual' takes here-- these reflect not some error term in the model, but the model predicting "correct" when it should have predicted "incorrect".
+
+But, still informative... these show that we have some points with very positive values that we aren't accounting for as well. These are unexplaned by our model at present!
+
+\
+
+\
+
+\
+
+\
+
+\
+
+\
+
+\
+
+
+```{r fig.width=4, fig.height=4}
+plot(density(resid(glmer1)),main='Distribution of residuals')
+
+qqnorm(resid(glmer1)); qqline(resid(glmer1))
+```
+</div>
+
+# GLMER models: repeated measures for binomial outcomes
+<div class="col2">
+
+One last set of plots to make... what does the effect look like from our model? For glmer models (and for complicated lmer models), I like to extract the effects using the 'effects' package
+
+```{r}
+plot(effect('Frequency',glmer1))
+
+plot(effect('Frequency:NativeLanguage',glmer1))
+
+```
+</div>
+
+
+# More about interactions in mixed models
+
+More complex interaction terms are something that is often new to people when moving away from ANOVA.
+
+This is pretty straightforward in (g)lm and (g)lmer models-- in fact, you don't have to do post-hoc comparisons.
+
+# More about interactions in mixed models
+
+First tip: Interpreting multi-way interactions is really just like intepreting two-way interactions, scaled up. 
+
+  * A two-way interaction effect is a difference of differences (a difference in how the two levels of one variable are different on another variable)
+
+  * A three-way interaction effect is a difference of differences of differences (a different two-way interaction across levels of a different variable)
+
+  -> As a heuristic, if there is an interaction effect-- there is often just one point that is different from what you expect.  Plot your numbers, and find it. This will help guide you in reading your output.
+  
+\
+
+Second tip:  But, interpretations of main effects depend a lot on contrasts.
+
+  * This is because the main effect of variable A is evaluated at whatever zero reflects for variable B.
+
+  * For the highest-order interaction, it will be the same regardless of what contrasts you put in. This is *because* it reflects a difference of differences.
+
+\
+
+Third tip: There will be *MORE CONTRASTS* for variables with more levels-- but you can use this to your advantage. 
+
+# Apply this in an example. 
+<div class="col2">
+
+I am basing this off of the cake data in lme4. This was a food science experiment where some scientists made snack cakes (like Twinkies) and broke them in half to see if the new recipe had the properties of the original: here, breakage angle, which is a proxy for denseness/moistness of cake.
+
+![](https://upload.wikimedia.org/wikipedia/commons/6/67/Hostess-Twinkies.jpg){width=20%}
+
+I took the numbers from the original data and re-combined, and resampled, to make a useful teaching example. Details below...
+
+  - Our DV is  'angle' -- how breakable the cakes are. I added to this to make an interaction appear in the data.
+
+  - 'time' reflects two time points at which the cakes were baked (to get this I split the replicates in half.  let's say that this reflects that the original baker made cakes on Monday, and on Wednesday). A 2 level categorical variable.
+
+  - 'recipe' is the original recipe factor. A 3 level categorical variable.
+
+  - 'temperature' is a 2 level categorical variable (the highest and lowest of the original temperatures).
+
+  - 'batch' is a combination of the original variables of replicate and recipe. This will be our grouping variable. 
+
+```{r include=T}
+## setting up the data
+cake$time <- ifelse(as.numeric(cake$replicate)<8,'t1','t2')
+cake$time <- as.factor(cake$time)
+cake$batch <- as.factor(paste0(cake$recipe,cake$replicate))
+cake2 <- cake %>% filter(temp==175 | temp==225)
+cake2 <- droplevels(cake2)
+cake2[(cake2$recipe=='C' & cake2$time=='t2' & cake2$temp=='225'),]$angle <- cake2[(cake2$recipe=='C' & cake2$time=='t2' & cake2$temp=='225'),]$angle + 20
+```
+</div>
+
+# Cake analysis setup
+<div class="col2">
+I am going to set up effects contrasts for temperature and time (compare time 1 to time 2; compare temp 1 to temp 2; make the effects of each other variable reflect main effects).
+
+For batch, I'll use a coding scheme called Helmert, where we compare (Batch A and B) to batch C in one contrast, and compare A and B in the other.
+
+Because of these coding schemes (zero is in the middle), this means that the main effects in this model are actually main effects.
+
+```{r}
+## setting up the contrasts
+contrasts(cake2$time) <- c(-1,1)
+contrasts(cake2$temperature) <- c(-1,1)
+contrasts(cake2$recipe) <- contr.helmert
+
+contrasts(cake2$time)
+contrasts(cake2$temperature)
+contrasts(cake2$recipe) 
+```
+</div>
+
+# Cake analysis
+
+Fit a model. Note the three-way interaction, involving a three-level variable. (eek! really, don't try to run anything more complex than this)
+
+```{r fit, include=T}
+m1 <- lmer(angle ~ recipe*temperature*time + (1|batch), data=cake2)
+```
+
+# Unpacking the model
+<div class="col2">
+Take t > |2| to reflect reliable effects.  We observe...
+
+- a main effect of recipe--2nd contrast: this means that the C recipe is different compared to the A and B for cake breakage angle.
+
+- a main effect of temperature-- 225 is different than 175 for cake breakage angle.
+
+- an interaction between temperature and time: on average, the 175 temperature has a smaller breakage angle at time 2 than time 1, but the 225 temperature does not.
+
+- an interaction between recipe--2nd contrast, temperature, and time: the difference between temperature and time (2-way interaction) differs when comparing level C to the combination of the other two levels.
+
+```{r}
+summary(m1)
+```
+</div>
+
+# Unpacking the model
+<div class="col2">
+
+There is a three-way interaction between recipe--2nd contrast, temperature, and time.  This means: the difference between temperature and time (2-way interaction) differs when comparing level C to the combination of the other two levels.
+
+This is to say: when you look at the plot, there's a two-way interaction visible in the A and B panels.  There's also a two-way interaction visible in the C panel-- and it's a different one. Specifically, the last yellow point goes up, rather than down.
+
+\
+
+\
+
+\
+
+\
+
+```{r include=T}
+ggplot(cake2, aes(x=time,y=angle,color=temperature))+
+  geom_point()+geom_smooth(aes(x=as.numeric(time)),method='lm')+facet_grid(~recipe)
+
+```
+</div>
+
+# More about mixed models
+
+To learn more about mixed models:
+http://www.bodowinter.com/tutorial/bw_LME_tutorial2.pdf
+
+
+For trouble-shooting:
+https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html
+
+And feel free to use my own best-practices guide, which I have put in the folder for this course.
+
